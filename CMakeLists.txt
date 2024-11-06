@@ -4,7 +4,7 @@
 # To configure the build options either use the CMake gui, or run the command
 # line utility including the "-i" option.
 
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.20)
 cmake_policy(SET CMP0042 NEW)
 
 project(mosquitto)
@@ -25,13 +25,66 @@ endif(APPLE)
 
 include(GNUInstallDirs)
 
+set(CMAKE_SKIP_BUILD_RPATH FALSE)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+set(REACH_ARCH ${CMAKE_SYSTEM_PROCESSOR} CACHE STRING "Output architecture")
+set(REACH_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR})
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${REACH_BUILD_DIR}/obj/${REACH_ARCH}$<IF:$<CONFIG:Debug>,chk,fre>)
+set(REACH_OUTPUT_DIR ${REACH_BUILD_DIR}/bin/${REACH_ARCH}$<IF:$<CONFIG:Debug>,chk,fre> CACHE STRING "Output directory for build artifacts")
+message(STATUS "Build Output: ${REACH_OUTPUT_DIR}")
+
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${REACH_OUTPUT_DIR})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${REACH_OUTPUT_DIR})
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${REACH_OUTPUT_DIR})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${REACH_OUTPUT_DIR})
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG ${REACH_OUTPUT_DIR})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${REACH_OUTPUT_DIR})
+
+set(CMAKE_BUILD_TYPE "Debug")
+
+option(WITH_STATIC_LIBRARIES "Build static versions of the libmosquitto/pp libraries?" OFF)
+option(WITH_PIC "Build the static library with PIC (Position Independent Code) enabled archives?" OFF)
+
+option(WITH_QUIC "Include QUIC support?" ON)
+
+if (WITH_QUIC)
+	add_definitions("-DWITH_QUIC")
+
+	option(WITH_TLS "Include SSL/TLS support?" OFF)
+	option(WITH_TLS_PSK "Include TLS-PSK support (requires WITH_TLS)?" OFF)
+	option(WITH_EC "Include Elliptic Curve support (requires WITH_TLS)?" OFF)
+	option(WITH_UNIX_SOCKETS "Include Unix Domain Socket support?" OFF)
+	option(WITH_SOCKS "Include SOCKS5 support?" OFF)
+
+	if (WIN32)
+		set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+		set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /NODEFAULTLIB:libucrt.lib /DEFAULTLIB:ucrt.lib")
+		set(QUIC_TLS "schannel" CACHE STRING "TLS Library to use")
+	else()
+		set(QUIC_TLS "openssl" CACHE STRING "TLS Library to use")
+	endif()
+	
+	if(WITH_STATIC_LIBRARIES)
+		set(QUIC_BUILD_SHARED OFF CACHE BOOL "Builds MsQuic as a static library")
+	else()
+		set(QUIC_BUILD_SHARED ON CACHE BOOL "Builds MsQuic as a dynamic library")
+	endif()
+
+	set(QUIC_ENABLE_LOGGING ON CACHE BOOL "Enable MsQuic logging")
+	add_subdirectory(third_party/msquic)
+else(WITH_QUIC)
+	option(WITH_TLS "Include SSL/TLS support?" ON)
+	option(WITH_TLS_PSK "Include TLS-PSK support (requires WITH_TLS)?" ON)
+	option(WITH_EC "Include Elliptic Curve support (requires WITH_TLS)?" ON)
+	option(WITH_UNIX_SOCKETS "Include Unix Domain Socket support?" ON)
+	option(WITH_SOCKS "Include SOCKS5 support?" ON)
+endif (WITH_QUIC)
+
 option(WITH_BUNDLED_DEPS "Build with bundled dependencies?" ON)
-option(WITH_TLS
-	"Include SSL/TLS support?" ON)
-option(WITH_TLS_PSK
-	"Include TLS-PSK support (requires WITH_TLS)?" ON)
-option(WITH_EC
-	"Include Elliptic Curve support (requires WITH_TLS)?" ON)
+
 if (WITH_TLS)
 	find_package(OpenSSL REQUIRED)
 	add_definitions("-DWITH_TLS")
@@ -66,9 +119,6 @@ endif (WITH_SOCKS)
 
 option(WITH_SRV "Include SRV lookup support?" OFF)
 
-option(WITH_STATIC_LIBRARIES "Build static versions of the libmosquitto/pp libraries?" OFF)
-option(WITH_PIC "Build the static library with PIC (Position Independent Code) enabled archives?" OFF)
-
 option(WITH_THREADING "Include client library threading support?" ON)
 if (WITH_THREADING)
 	add_definitions("-DWITH_THREADING")
@@ -96,6 +146,21 @@ if (WITH_CJSON)
     endif(CJSON_FOUND)
 endif()
 
+set(CMAKE_C_FLAGS_DEBUG "-Og -fno-omit-frame-pointer")
+set(CMAKE_C_FLAGS_MINSIZEREL "-Os -DNDEBUG")
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -fno-omit-frame-pointer ${MARCH} -DNDEBUG")
+set(CMAKE_C_FLAGS_RELEASE "-O3 ${MARCH} -DNDEBUG")
+if (CX_PLATFORM STREQUAL "darwin")
+	set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -gdwarf")
+	set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} -gdwarf")
+else()
+	set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -ggdb3")
+	set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} -ggdb3")
+endif()
+set(CMAKE_CXX_FLAGS_DEBUG ${CMAKE_C_FLAGS_DEBUG})
+set(CMAKE_CXX_FLAGS_MINSIZEREL ${CMAKE_C_FLAGS_MINSIZEREL})
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO ${CMAKE_C_FLAGS_RELWITHDEBINFO})
+set(CMAKE_CXX_FLAGS_RELEASE ${CMAKE_C_FLAGS_RELEASE})
 # ========================================
 # Include projects
 # ========================================

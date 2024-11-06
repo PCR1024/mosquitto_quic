@@ -15,8 +15,9 @@ SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
 Contributors:
    Roger Light - initial implementation and documentation.
 */
-
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #include "config.h"
 
 #include <assert.h>
@@ -25,7 +26,9 @@ Contributors:
 #include <stdio.h>
 #include <string.h>
 #ifndef WIN32
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>

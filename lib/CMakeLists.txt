@@ -73,6 +73,10 @@ if (WIN32)
 	set (LIBRARIES ${LIBRARIES} ws2_32)
 endif (WIN32)
 
+if (WITH_QUIC)
+	set (LIBRARIES ${LIBRARIES} inc warnings msquic)
+endif (WITH_QUIC)
+
 if (WITH_SRV)
 	# Simple detect c-ares
 	find_path(ARES_HEADER ares.h)
@@ -128,7 +132,7 @@ if (WITH_STATIC_LIBRARIES)
 		)
 	endif (WITH_PIC)
 
-	target_link_libraries(libmosquitto_static ${LIBRARIES})
+	target_link_libraries(libmosquitto_static ${LIBRARIES} base_link)
 
 	set_target_properties(libmosquitto_static PROPERTIES
 		OUTPUT_NAME mosquitto_static
