@@ -1252,6 +1252,7 @@ int client_opts_set(struct mosquitto *mosq, struct mosq_config *cfg)
 		mosquitto_lib_cleanup();
 		return 1;
 	}
+#ifdef WITH_TCP
 #ifdef WITH_TLS
 	if(cfg->keyform && mosquitto_string_option(mosq, MOSQ_OPT_TLS_KEYFORM, cfg->keyform)){
 		err_printf(cfg, "Error: Problem setting key form, it must be one of 'pem' or 'engine'.\n");
@@ -1323,7 +1324,15 @@ int client_opts_set(struct mosquitto *mosq, struct mosq_config *cfg)
 	if(cfg->tcp_nodelay){
 		mosquitto_int_option(mosq, MOSQ_OPT_TCP_NODELAY, 1);
 	}
-
+#endif
+#ifdef WITH_QUIC
+	if(mosquitto_quic_set(mosq))
+	{
+		err_printf(cfg, "Error: Problem setting QUIC.\n");
+		mosquitto_lib_cleanup();
+		return 1;
+	}
+#endif
 	if(cfg->msg_count > 0 && cfg->msg_count < 20){
 		/* 20 is the default "receive maximum"
 		 * If we don't set this, then we can receive > msg_count messages

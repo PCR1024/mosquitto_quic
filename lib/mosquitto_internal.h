@@ -26,6 +26,10 @@ Contributors:
 #  include <winsock2.h>
 #endif
 
+#ifdef WITH_QUIC
+#include "msquic.h"
+#endif
+
 #ifdef WITH_TLS
 #  include <openssl/ssl.h>
 #else
@@ -207,13 +211,27 @@ struct mosquitto_msg_data{
 	uint16_t inflight_maximum;
 };
 
+#ifdef WITH_QUIC
+struct mosq_quic_session_t {
+	HQUIC connection;
+    HQUIC stream;
+};
+#endif
 
 struct mosquitto {
 #if defined(WITH_BROKER) && defined(WITH_EPOLL)
 	/* This *must* be the first element in the struct. */
 	int ident;
 #endif
+
+#ifdef WITH_QUIC
+    HQUIC quic_registration;
+	HQUIC quic_configuration;
+	struct mosq_quic_session_t *quic_session;	
+#endif
+#ifdef WITH_TCP
 	mosq_sock_t sock;
+#endif
 #ifndef WITH_BROKER
 	mosq_sock_t sockpairR, sockpairW;
 #endif
@@ -345,7 +363,9 @@ struct mosquitto {
 #endif
 	uint8_t max_qos;
 	uint8_t retain_available;
+#ifdef WITH_TCP
 	bool tcp_nodelay;
+#endif
 
 #ifdef WITH_BROKER
 	UT_hash_handle hh_id;

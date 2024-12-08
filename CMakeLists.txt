@@ -48,16 +48,13 @@ set(CMAKE_BUILD_TYPE "Debug")
 option(WITH_STATIC_LIBRARIES "Build static versions of the libmosquitto/pp libraries?" OFF)
 option(WITH_PIC "Build the static library with PIC (Position Independent Code) enabled archives?" OFF)
 
-option(WITH_QUIC "Include QUIC support?" ON)
+option(WITH_BUNDLED_DEPS "Build with bundled dependencies?" ON)
 
-if (WITH_QUIC)
+set(WITH_TRANSPORT "QUIC" CACHE STRING "Choose transport protocol: QUIC or TCP")
+set_property(CACHE WITH_TRANSPORT PROPERTY STRINGS "QUIC" "TCP")
+
+if (WITH_TRANSPORT STREQUAL "QUIC")
 	add_definitions("-DWITH_QUIC")
-
-	option(WITH_TLS "Include SSL/TLS support?" OFF)
-	option(WITH_TLS_PSK "Include TLS-PSK support (requires WITH_TLS)?" OFF)
-	option(WITH_EC "Include Elliptic Curve support (requires WITH_TLS)?" OFF)
-	option(WITH_UNIX_SOCKETS "Include Unix Domain Socket support?" OFF)
-	option(WITH_SOCKS "Include SOCKS5 support?" OFF)
 
 	if (WIN32)
 		set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -75,17 +72,15 @@ if (WITH_QUIC)
 
 	set(QUIC_ENABLE_LOGGING ON CACHE BOOL "Enable MsQuic logging")
 	add_subdirectory(third_party/msquic)
-else(WITH_QUIC)
+
+elseif(WITH_TRANSPORT STREQUAL "TCP")
+	add_definitions("-DWITH_TCP")
+
 	option(WITH_TLS "Include SSL/TLS support?" ON)
 	option(WITH_TLS_PSK "Include TLS-PSK support (requires WITH_TLS)?" ON)
 	option(WITH_EC "Include Elliptic Curve support (requires WITH_TLS)?" ON)
-	option(WITH_UNIX_SOCKETS "Include Unix Domain Socket support?" ON)
-	option(WITH_SOCKS "Include SOCKS5 support?" ON)
-endif (WITH_QUIC)
 
-option(WITH_BUNDLED_DEPS "Build with bundled dependencies?" ON)
-
-if (WITH_TLS)
+	if (WITH_TLS)
 	find_package(OpenSSL REQUIRED)
 	add_definitions("-DWITH_TLS")
 
@@ -102,20 +97,23 @@ if (WITH_TLS)
 	if (WITH_EC)
 		add_definitions("-DWITH_EC")
 	endif (WITH_EC)
-else (WITH_TLS)
-	set (OPENSSL_INCLUDE_DIR "")
-endif (WITH_TLS)
+	else (WITH_TLS)
+		set (OPENSSL_INCLUDE_DIR "")
+	endif (WITH_TLS)
 
+	option(WITH_UNIX_SOCKETS "Include Unix Domain Socket support?" ON)
+	if (WITH_UNIX_SOCKETS AND NOT WIN32)
+		add_definitions("-DWITH_UNIX_SOCKETS")
+	endif (WITH_UNIX_SOCKETS AND NOT WIN32)
 
-option(WITH_UNIX_SOCKETS "Include Unix Domain Socket support?" ON)
-if (WITH_UNIX_SOCKETS AND NOT WIN32)
-	add_definitions("-DWITH_UNIX_SOCKETS")
-endif (WITH_UNIX_SOCKETS AND NOT WIN32)
+	option(WITH_SOCKS "Include SOCKS5 support?" ON)
+	if (WITH_SOCKS)
+		add_definitions("-DWITH_SOCKS")
+	endif (WITH_SOCKS)
 
-option(WITH_SOCKS "Include SOCKS5 support?" ON)
-if (WITH_SOCKS)
-	add_definitions("-DWITH_SOCKS")
-endif (WITH_SOCKS)
+else()
+    message(FATAL_ERROR "Invalid value for WITH_TRANSPORT: ${WITH_TRANSPORT}. Choose 'QUIC' or 'TCP'.")
+endif()
 
 option(WITH_SRV "Include SRV lookup support?" OFF)
 
@@ -166,10 +164,10 @@ set(CMAKE_CXX_FLAGS_RELEASE ${CMAKE_C_FLAGS_RELEASE})
 # ========================================
 
 option(WITH_CLIENTS "Build clients?" ON)
-option(WITH_BROKER "Build broker?" ON)
-option(WITH_APPS "Build apps?" ON)
-option(WITH_PLUGINS "Build plugins?" ON)
-option(DOCUMENTATION "Build documentation?" ON)
+option(WITH_BROKER "Build broker?" OFF)
+option(WITH_APPS "Build apps?" OFF)
+option(WITH_PLUGINS "Build plugins?" OFF)
+option(DOCUMENTATION "Build documentation?" OFF)
 
 add_subdirectory(lib)
 if (WITH_CLIENTS)

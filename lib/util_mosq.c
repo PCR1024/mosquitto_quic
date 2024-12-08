@@ -91,9 +91,14 @@ int mosquitto__check_keepalive(struct mosquitto *mosq)
 	next_msg_out = mosq->next_msg_out;
 	last_msg_in = mosq->last_msg_in;
 	COMPAT_pthread_mutex_unlock(&mosq->msgtime_mutex);
+#ifdef WITH_QUIC
+	if(mosq->keepalive && mosq->quic_session != NULL &&
+			(now >= next_msg_out || now - last_msg_in >= mosq->keepalive)){
+#endif
+#ifdef WITH_TCP
 	if(mosq->keepalive && mosq->sock != INVALID_SOCKET &&
 			(now >= next_msg_out || now - last_msg_in >= mosq->keepalive)){
-
+#endif
 		state = mosquitto__get_state(mosq);
 		if(state == mosq_cs_active && mosq->ping_t == 0){
 			send__pingreq(mosq);
@@ -111,7 +116,14 @@ int mosquitto__check_keepalive(struct mosquitto *mosq)
 #  endif
 			net__socket_close(mosq);
 #else
+
+#ifdef WITH_QUIC
+			net__quic_close(mosq);
+#endif
+
+#ifdef WITH_TCP
 			net__socket_close(mosq);
+#endif
 			state = mosquitto__get_state(mosq);
 			if(state == mosq_cs_disconnecting){
 				rc = MOSQ_ERR_SUCCESS;

@@ -192,18 +192,29 @@ static int mosquitto__reconnect(struct mosquitto *mosq, bool blocking)
 
 	message__reconnect_reset(mosq, false);
 
+#ifdef WITH_QUIC
+	if (mosq->quic_session != NULL)
+	{
+		net__quic_close(mosq);
+	}
+	UNUSED(blocking);
+	rc = net__quic_connect(mosq, mosq->host, mosq->port, mosq->bind_address);
+#endif
+
+#ifdef WITH_TCP
 	if(mosq->sock != INVALID_SOCKET){
         net__socket_close(mosq);
     }
-
 #ifdef WITH_SOCKS
-	if(mosq->socks5_host){
+	if(mosq->socks5_host){rc = net__socket_connect(mosq, mosq->host, mosq->port, mosq->bind_address, blocking);
 		rc = net__socket_connect(mosq, mosq->socks5_host, mosq->socks5_port, mosq->bind_address, blocking);
 	}else
 #endif
-	{
+	{	
 		rc = net__socket_connect(mosq, mosq->host, mosq->port, mosq->bind_address, blocking);
 	}
+#endif
+
 	if(rc>0){
 		mosquitto__set_state(mosq, mosq_cs_connect_pending);
 		return rc;
@@ -220,7 +231,12 @@ static int mosquitto__reconnect(struct mosquitto *mosq, bool blocking)
 		rc = send__connect(mosq, mosq->keepalive, mosq->clean_start, outgoing_properties);
 		if(rc){
 			packet__cleanup_all(mosq);
+#ifdef WITH_QUIC
+			net__quic_close(mosq);
+#endif
+#ifdef WITH_TCP
 			net__socket_close(mosq);
+#endif
 			mosquitto__set_state(mosq, mosq_cs_new);
 		}
 		return rc;
@@ -257,7 +273,12 @@ int mosquitto_disconnect_v5(struct mosquitto *mosq, int reason_code, const mosqu
 
 	mosquitto__set_state(mosq, mosq_cs_disconnected);
 	mosquitto__set_request_disconnect(mosq, true);
+#ifdef WITH_QUIC
+	if(mosq->quic_session == NULL){
+#endif
+#ifdef WITH_TCP
 	if(mosq->sock == INVALID_SOCKET){
+#endif
 		return MOSQ_ERR_NO_CONN;
 	}else{
 		return send__disconnect(mosq, (uint8_t)reason_code, outgoing_properties);
@@ -268,7 +289,13 @@ int mosquitto_disconnect_v5(struct mosquitto *mosq, int reason_code, const mosqu
 void do_client_disconnect(struct mosquitto *mosq, int reason_code, const mosquitto_property *properties)
 {
 	mosquitto__set_state(mosq, mosq_cs_disconnected);
+
+#ifdef WITH_QUIC
+	net__quic_close(mosq);
+#endif
+#ifdef WITH_TCP
 	net__socket_close(mosq);
+#endif
 
 	/* Free data and reset values */
 	pthread_mutex_lock(&mosq->out_packet_mutex);

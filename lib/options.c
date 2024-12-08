@@ -36,9 +36,11 @@ Contributors:
 #include "memory_mosq.h"
 #include "misc_mosq.h"
 #include "mqtt_protocol.h"
+#ifdef WITH_QUIC
+#include "quic_mosq.h"
+#endif
 #include "util_mosq.h"
 #include "will_mosq.h"
-
 
 int mosquitto_will_set(struct mosquitto *mosq, const char *topic, int payloadlen, const void *payload, int qos, bool retain)
 {
@@ -121,6 +123,40 @@ int mosquitto_reconnect_delay_set(struct mosquitto *mosq, unsigned int reconnect
 	mosq->reconnect_exponential_backoff = reconnect_exponential_backoff;
 
 	return MOSQ_ERR_SUCCESS;
+}
+
+
+int mosquitto_quic_set(struct mosquitto *mosq)
+{
+#ifdef WITH_QUIC
+	QUIC_STATUS quic_status = QUIC_STATUS_SUCCESS;
+	
+	const QUIC_REGISTRATION_CONFIG quic_regconfig = {"mosquitto", QUIC_EXECUTION_PROFILE_LOW_LATENCY};
+	if (QUIC_FAILED(quic_status = MsQuic->RegistrationOpen(&quic_regconfig, &mosq->quic_registration))) {
+		return MOSQ_ERR_QUIC_REGISTRATION_OPEN;
+    }
+	
+	const QUIC_BUFFER quic_alpn = { sizeof("mqtt") - 1, (uint8_t*)"mqtt" };
+	QUIC_SETTINGS quic_settings = {0};
+	quic_settings.IdleTimeoutMs = 0;
+    quic_settings.IsSet.IdleTimeoutMs = 1;
+
+    if (QUIC_FAILED(quic_status = MsQuic->ConfigurationOpen(mosq->quic_registration, &quic_alpn, 1, &quic_settings, sizeof(quic_settings), NULL, &mosq->quic_configuration))) {
+		return MOSQ_ERR_QUIC_CONFIGURATION_OPEN;
+    }
+
+	QUIC_CREDENTIAL_CONFIG quic_credconfig;
+    memset(&quic_credconfig, 0, sizeof(quic_credconfig));
+    quic_credconfig.Type = QUIC_CREDENTIAL_TYPE_NONE;
+    quic_credconfig.Flags = QUIC_CREDENTIAL_FLAG_CLIENT | QUIC_CREDENTIAL_FLAG_NO_CERTIFICATE_VALIDATION;
+	if (QUIC_FAILED(quic_status = MsQuic->ConfigurationLoadCredential(mosq->quic_configuration, &quic_credconfig))) {
+        return MOSQ_ERR_QUIC_CONFIGURATION_LOAD_CRED;
+    }
+	return MOSQ_ERR_SUCCESS;
+#else
+	UNUSED(mosq);
+	return MOSQ_ERR_NOT_SUPPORTED;
+#endif
 }
 
 
@@ -504,7 +540,11 @@ int mosquitto_int_option(struct mosquitto *mosq, enum mosq_opt_t option, int val
 			break;
 
 		case MOSQ_OPT_TCP_NODELAY:
+#ifdef WITH_TCP
 			mosq->tcp_nodelay = (bool)value;
+#else
+			return MOSQ_ERR_NOT_SUPPORTED;
+#endif
 			break;
 
 		default:
@@ -548,7 +588,10 @@ void mosquitto_user_data_set(struct mosquitto *mosq, void *userdata)
 	}
 }
 
+
 void *mosquitto_userdata(struct mosquitto *mosq)
 {
 	return mosq->userdata;
 }
+
+

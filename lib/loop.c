@@ -38,6 +38,7 @@ Contributors:
 
 int mosquitto_loop(struct mosquitto *mosq, int timeout, int max_packets)
 {
+#ifdef WITH_TCP
 #ifdef HAVE_PSELECT
 	struct timespec local_timeout;
 #else
@@ -178,11 +179,19 @@ int mosquitto_loop(struct mosquitto *mosq, int timeout, int max_packets)
 #endif
 	}
 	return mosquitto_loop_misc(mosq);
+#endif
+#ifdef WITH_QUIC
+	UNUSED(mosq);
+	UNUSED(timeout);
+	UNUSED(max_packets);
+	return MOSQ_ERR_SUCCESS;
+#endif
 }
 
 
 static int interruptible_sleep(struct mosquitto *mosq, time_t reconnect_delay)
 {
+#ifdef WITH_TCP
 #ifdef HAVE_PSELECT
 	struct timespec local_timeout;
 #else
@@ -236,11 +245,18 @@ static int interruptible_sleep(struct mosquitto *mosq, time_t reconnect_delay)
 #endif
 	}
 	return MOSQ_ERR_SUCCESS;
+#endif
+#ifdef WITH_QUIC
+	UNUSED(mosq);
+	UNUSED(reconnect_delay);
+	return MOSQ_ERR_SUCCESS;
+#endif
 }
 
 
 int mosquitto_loop_forever(struct mosquitto *mosq, int timeout, int max_packets)
 {
+#ifdef WITH_TCP
 	int run = 1;
 	int rc = MOSQ_ERR_SUCCESS;
 	unsigned long reconnect_delay;
@@ -313,20 +329,36 @@ int mosquitto_loop_forever(struct mosquitto *mosq, int timeout, int max_packets)
 		}while(run && rc != MOSQ_ERR_SUCCESS);
 	}
 	return rc;
+#endif
+#ifdef WITH_QUIC
+	unsigned long reconnect_delay = 1;
+	interruptible_sleep(mosq, (time_t)reconnect_delay);
+	UNUSED(mosq);
+	UNUSED(timeout);
+	UNUSED(max_packets);
+	return MOSQ_ERR_SUCCESS;
+#endif
 }
 
 
 int mosquitto_loop_misc(struct mosquitto *mosq)
 {
+#ifdef WITH_TCP
 	if(!mosq) return MOSQ_ERR_INVAL;
 	if(mosq->sock == INVALID_SOCKET) return MOSQ_ERR_NO_CONN;
 
 	return mosquitto__check_keepalive(mosq);
+#endif
+#ifdef WITH_QUIC
+	UNUSED(mosq);
+	return MOSQ_ERR_SUCCESS;
+#endif
 }
 
 
 static int mosquitto__loop_rc_handle(struct mosquitto *mosq, int rc)
 {
+#ifdef WITH_TCP
 	enum mosquitto_client_state state;
 
 	if(rc){
@@ -349,11 +381,18 @@ static int mosquitto__loop_rc_handle(struct mosquitto *mosq, int rc)
 		pthread_mutex_unlock(&mosq->callback_mutex);
 	}
 	return rc;
+#endif
+#ifdef WITH_QUIC
+	UNUSED(mosq);
+	UNUSED(rc);
+	return MOSQ_ERR_SUCCESS;
+#endif
 }
 
 
 int mosquitto_loop_read(struct mosquitto *mosq, int max_packets)
 {
+#ifdef WITH_TCP
 	int rc = MOSQ_ERR_SUCCESS;
 	int i;
 	if(max_packets < 1) return MOSQ_ERR_INVAL;
@@ -384,11 +423,20 @@ int mosquitto_loop_read(struct mosquitto *mosq, int max_packets)
 		}
 	}
 	return rc;
+#endif
+#ifdef WITH_QUIC
+	int rc = MOSQ_ERR_SUCCESS;
+	mosquitto__loop_rc_handle(mosq, rc);
+	UNUSED(max_packets);
+
+	return MOSQ_ERR_SUCCESS;
+#endif
 }
 
 
 int mosquitto_loop_write(struct mosquitto *mosq, int max_packets)
 {
+#ifdef WITH_TCP
 	int rc = MOSQ_ERR_SUCCESS;
 	int i;
 	if(max_packets < 1) return MOSQ_ERR_INVAL;
@@ -400,5 +448,10 @@ int mosquitto_loop_write(struct mosquitto *mosq, int max_packets)
 		}
 	}
 	return rc;
+#endif
+#ifdef WITH_QUIC
+	UNUSED(mosq);
+	UNUSED(max_packets);
+	return MOSQ_ERR_SUCCESS;
+#endif
 }
-

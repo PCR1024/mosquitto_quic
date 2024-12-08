@@ -1,4 +1,4 @@
-option(WITH_LIB_CPP "Build C++ library?" ON)
+option(WITH_LIB_CPP "Build C++ library?" OFF)
 if (WITH_LIB_CPP)
 	add_subdirectory(cpp)
 endif (WITH_LIB_CPP)
@@ -42,6 +42,7 @@ set(C_SRC
 	packet_datatypes.c
 	packet_mosq.c packet_mosq.h
 	property_mosq.c property_mosq.h
+	quic_mosq.c quic_mosq.h
 	read_handle.c read_handle.h
 	send_connect.c
 	send_disconnect.c
@@ -73,9 +74,9 @@ if (WIN32)
 	set (LIBRARIES ${LIBRARIES} ws2_32)
 endif (WIN32)
 
-if (WITH_QUIC)
+if (WITH_TRANSPORT STREQUAL "QUIC")
 	set (LIBRARIES ${LIBRARIES} inc warnings msquic)
-endif (WITH_QUIC)
+endif()
 
 if (WITH_SRV)
 	# Simple detect c-ares

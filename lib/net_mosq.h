@@ -63,6 +63,8 @@ typedef SSIZE_T ssize_t;
 int net__init(void);
 void net__cleanup(void);
 
+#ifdef WITH_TCP
+
 #ifdef WITH_TLS
 void net__init_tls(void);
 #endif
@@ -73,10 +75,25 @@ int net__try_connect(const char *host, uint16_t port, mosq_sock_t *sock, const c
 int net__try_connect_step1(struct mosquitto *mosq, const char *host);
 int net__try_connect_step2(struct mosquitto *mosq, uint16_t port, mosq_sock_t *sock);
 int net__socket_connect_step3(struct mosquitto *mosq, const char *host);
-int net__socket_nonblock(mosq_sock_t *sock);
-int net__socketpair(mosq_sock_t *sp1, mosq_sock_t *sp2);
+#endif
 
-ssize_t net__read(struct mosquitto *mosq, void *buf, size_t count);
+int net__socket_nonblock(mosq_sock_t *sock);
+
+#ifdef WITH_QUIC
+int net__quic_connect(struct mosquitto *mosq, const char *host, uint16_t port, const char *bind_address);
+int net__quic_close(struct mosquitto *mosq);
+#endif
+
+int net__socketpair(mosq_sock_t *sp1, mosq_sock_t *sp2);
+ssize_t net__read(
+#ifdef WITH_TCP
+	struct mosquitto *mosq,
+#endif
+#ifdef WITH_QUIC
+	const QUIC_STREAM_EVENT* Event,
+#endif
+	void *buf, 
+	size_t count);
 ssize_t net__write(struct mosquitto *mosq, const void *buf, size_t count);
 
 #ifdef WITH_TLS

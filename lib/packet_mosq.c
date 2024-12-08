@@ -230,8 +230,12 @@ int packet__write(struct mosquitto *mosq)
 	enum mosquitto_client_state state;
 
 	if(!mosq) return MOSQ_ERR_INVAL;
+#ifdef WITH_QUIC
+	if(mosq->quic_session == NULL) return MOSQ_ERR_NO_CONN;
+#endif
+#ifdef WITH_BROKER
 	if(mosq->sock == INVALID_SOCKET) return MOSQ_ERR_NO_CONN;
-
+#endif
 	COMPAT_pthread_mutex_lock(&mosq->current_out_packet_mutex);
 	COMPAT_pthread_mutex_lock(&mosq->out_packet_mutex);
 	if(mosq->out_packet && !mosq->current_out_packet){
@@ -352,7 +356,7 @@ int packet__write(struct mosquitto *mosq)
 	return MOSQ_ERR_SUCCESS;
 }
 
-
+#ifndef WITH_QUIC
 int packet__read(struct mosquitto *mosq)
 {
 	uint8_t byte;
@@ -577,3 +581,4 @@ int packet__read(struct mosquitto *mosq)
 #endif
 	return rc;
 }
+#endif

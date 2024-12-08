@@ -122,6 +122,13 @@ enum mosq_err_t {
 	MOSQ_ERR_TOPIC_ALIAS_INVALID = 29,
 	MOSQ_ERR_ADMINISTRATIVE_ACTION = 30,
 	MOSQ_ERR_ALREADY_EXISTS = 31,
+	MOSQ_ERR_QUIC_REGISTRATION_OPEN = 32,
+	MOSQ_ERR_QUIC_CONFIGURATION_OPEN = 33,
+	MOSQ_ERR_QUIC_CONFIGURATION_LOAD_CRED = 34,
+	MOSQ_ERR_QUIC_CONNECTION_OPEN = 35,
+	MOSQ_ERR_QUIC_CONNECTION_START = 36,
+	MOSQ_ERR_QUIC_STREAM_OPEN = 37,
+	MOSQ_ERR_QUIC_STREAM_START = 38,
 };
 
 /* Enum: mosq_opt_t
@@ -1439,7 +1446,7 @@ libmosq_EXPORT int mosquitto_loop_misc(struct mosquitto *mosq);
  * Returns:
  *	The socket for the mosquitto client or -1 on failure.
  */
-libmosq_EXPORT int mosquitto_socket(struct mosquitto *mosq);
+// libmosq_EXPORT int mosquitto_socket(struct mosquitto *mosq);
 
 /*
  * Function: mosquitto_want_write
@@ -1740,6 +1747,7 @@ libmosq_EXPORT void mosquitto_user_data_set(struct mosquitto *mosq, void *obj);
 libmosq_EXPORT void *mosquitto_userdata(struct mosquitto *mosq);
 
 
+int mosquitto_quic_set(struct mosquitto *mosq);
 /* ======================================================================
  *
  * Section: TLS support
@@ -1793,6 +1801,7 @@ libmosq_EXPORT void *mosquitto_userdata(struct mosquitto *mosq);
  *	<mosquitto_tls_opts_set>, <mosquitto_tls_psk_set>,
  *	<mosquitto_tls_insecure_set>, <mosquitto_userdata>
  */
+
 libmosq_EXPORT int mosquitto_tls_set(struct mosquitto *mosq,
 		const char *cafile, const char *capath,
 		const char *certfile, const char *keyfile,

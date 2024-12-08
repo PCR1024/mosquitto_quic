@@ -38,6 +38,9 @@ Contributors:
 #include "mqtt_protocol.h"
 #include "net_mosq.h"
 #include "packet_mosq.h"
+#ifdef WITH_QUIC
+#include "quic_mosq.h"
+#endif
 #include "time_mosq.h"
 #include "will_mosq.h"
 
@@ -115,7 +118,12 @@ struct mosquitto *mosquitto_new(const char *id, bool clean_start, void *userdata
 
 	mosq = (struct mosquitto *)mosquitto__calloc(1, sizeof(struct mosquitto));
 	if(mosq){
+#ifdef WITH_QUIC
+		mosq->quic_session = NULL;
+#endif
+#ifdef WITH_TCP
 		mosq->sock = INVALID_SOCKET;
+#endif
 #ifdef WITH_THREADING
 		mosq->thread_id = pthread_self();
 #endif
@@ -154,7 +162,14 @@ int mosquitto_reinitialise(struct mosquitto *mosq, const char *id, bool clean_st
 		mosq->userdata = mosq;
 	}
 	mosq->protocol = mosq_p_mqtt311;
+#ifdef WITH_QUIC
+	mosq->quic_registration = NULL;
+	mosq->quic_configuration = NULL;
+	mosq->quic_session = NULL;
+#endif
+#ifdef WITH_TCP
 	mosq->sock = INVALID_SOCKET;
+#endif
 	mosq->sockpairR = INVALID_SOCKET;
 	mosq->sockpairW = INVALID_SOCKET;
 	mosq->keepalive = 60;
@@ -259,9 +274,26 @@ void mosquitto__destroy(struct mosquitto *mosq)
 		pthread_mutex_destroy(&mosq->mid_mutex);
 	}
 #endif
+#ifdef WITH_QUIC
+	if(MsQuic != NULL){
+		if (mosq->quic_session != NULL) {
+			net__quic_close(mosq);
+		}
+		if(mosq->quic_configuration !=NULL){
+			MsQuic->ConfigurationClose(mosq->quic_configuration);
+			mosq->quic_configuration = NULL;
+		}
+		if (mosq->quic_registration != NULL) {
+			MsQuic->RegistrationClose(mosq->quic_registration);
+			mosq->quic_registration = NULL;
+		}
+	}
+#endif
+#ifdef WITH_TCP
 	if(mosq->sock != INVALID_SOCKET){
 		net__socket_close(mosq);
 	}
+#endif
 	message__cleanup_all(mosq);
 	will__clear(mosq);
 #ifdef WITH_TLS
@@ -324,11 +356,13 @@ void mosquitto_destroy(struct mosquitto *mosq)
 	mosquitto__free(mosq);
 }
 
+#ifdef WITH_TCP
 int mosquitto_socket(struct mosquitto *mosq)
 {
 	if(!mosq) return INVALID_SOCKET;
 	return mosq->sock;
 }
+#endif
 
 
 bool mosquitto_want_write(struct mosquitto *mosq)

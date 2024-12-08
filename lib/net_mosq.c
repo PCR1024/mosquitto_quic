@@ -56,6 +56,10 @@ Contributors:
 #include <net/netbyte.h>
 #endif
 
+#ifdef WITH_QUIC
+#include "quic_mosq.h"
+#endif
+
 #ifdef WITH_TLS
 #include <openssl/conf.h>
 #include <openssl/engine.h>
@@ -80,6 +84,7 @@ Contributors:
 #include "time_mosq.h"
 #include "util_mosq.h"
 
+#ifdef WITH_TCP
 #ifdef WITH_TLS
 int tls_ex_index_mosq = -1;
 UI_METHOD *_ui_method = NULL;
@@ -130,25 +135,35 @@ UI_METHOD *net__get_ui_method(void)
 }
 
 #endif
+#endif
 
 int net__init(void)
 {
-#ifdef WIN32
+#if defined(WITH_TCP) && defined(WIN32)
 	WSADATA wsaData;
 	if(WSAStartup(MAKEWORD(2,2), &wsaData) != 0){
 		return MOSQ_ERR_UNKNOWN;
 	}
 #endif
 
+#ifdef WITH_QUIC
+	if(MsQuic == NULL){
+		QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
+    	if (QUIC_FAILED(Status = MsQuicOpen2(&MsQuic))) {
+			return MOSQ_ERR_UNKNOWN;
+    	}
+	}
+#endif
+
 #ifdef WITH_SRV
 	ares_library_init(ARES_LIB_INIT_ALL);
 #endif
-
 	return MOSQ_ERR_SUCCESS;
 }
 
 void net__cleanup(void)
 {
+
 #ifdef WITH_TLS
 #  if OPENSSL_VERSION_NUMBER < 0x10100000L
 	CRYPTO_cleanup_all_ex_data();
@@ -170,10 +185,19 @@ void net__cleanup(void)
 	ares_library_cleanup();
 #endif
 
-#ifdef WIN32
+#if defined(WITH_TCP) && defined(WIN32)
 	WSACleanup();
 #endif
+
+#ifdef WITH_QUIC
+	if(MsQuic != NULL){
+		MsQuicClose(MsQuic);
+	}
+#endif
+
 }
+
+#ifdef WITH_TCP
 
 #ifdef WITH_TLS
 void net__init_tls(void)
@@ -201,65 +225,11 @@ void net__init_tls(void)
 }
 #endif
 
+
 /* Close a socket associated with a context and set it to -1.
  * Returns 1 on failure (context is NULL)
  * Returns 0 on success.
  */
-int net__socket_close(struct mosquitto *mosq)
-{
-	int rc = 0;
-#ifdef WITH_BROKER
-	struct mosquitto *mosq_found;
-#endif
-
-	assert(mosq);
-#ifdef WITH_TLS
-#ifdef WITH_WEBSOCKETS
-	if(!mosq->wsi)
-#endif
-	{
-		if(mosq->ssl){
-			if(!SSL_in_init(mosq->ssl)){
-				SSL_shutdown(mosq->ssl);
-			}
-			SSL_free(mosq->ssl);
-			mosq->ssl = NULL;
-		}
-	}
-#endif
-
-#ifdef WITH_WEBSOCKETS
-	if(mosq->wsi)
-	{
-		if(mosq->state != mosq_cs_disconnecting){
-			mosquitto__set_state(mosq, mosq_cs_disconnect_ws);
-		}
-		lws_callback_on_writable(mosq->wsi);
-	}else
-#endif
-	{
-		if(mosq->sock != INVALID_SOCKET){
-#ifdef WITH_BROKER
-			HASH_FIND(hh_sock, db.contexts_by_sock, &mosq->sock, sizeof(mosq->sock), mosq_found);
-			if(mosq_found){
-				HASH_DELETE(hh_sock, db.contexts_by_sock, mosq_found);
-			}
-#endif
-			rc = COMPAT_CLOSE(mosq->sock);
-			mosq->sock = INVALID_SOCKET;
-		}
-	}
-
-#ifdef WITH_BROKER
-	if(mosq->listener){
-		mosq->listener->client_count--;
-		mosq->listener = NULL;
-	}
-#endif
-
-	return rc;
-}
-
 
 #ifdef FINAL_WITH_TLS_PSK
 static unsigned int psk_client_callback(SSL *ssl, const char *hint,
@@ -389,6 +359,60 @@ int net__try_connect_step2(struct mosquitto *mosq, uint16_t port, mosq_sock_t *s
 
 #endif
 
+int net__socket_close(struct mosquitto *mosq)
+{
+	int rc = 0;
+#ifdef WITH_BROKER
+	struct mosquitto *mosq_found;
+#endif
+
+	assert(mosq);
+#ifdef WITH_TLS
+#ifdef WITH_WEBSOCKETS
+	if(!mosq->wsi)
+#endif
+	{
+		if(mosq->ssl){
+			if(!SSL_in_init(mosq->ssl)){
+				SSL_shutdown(mosq->ssl);
+			}
+			SSL_free(mosq->ssl);
+			mosq->ssl = NULL;
+		}
+	}
+#endif
+
+#ifdef WITH_WEBSOCKETS
+	if(mosq->wsi)
+	{
+		if(mosq->state != mosq_cs_disconnecting){
+			mosquitto__set_state(mosq, mosq_cs_disconnect_ws);
+		}
+		lws_callback_on_writable(mosq->wsi);
+	}else
+#endif
+	{
+		if(mosq->sock != INVALID_SOCKET){
+#ifdef WITH_BROKER
+			HASH_FIND(hh_sock, db.contexts_by_sock, &mosq->sock, sizeof(mosq->sock), mosq_found);
+			if(mosq_found){
+				HASH_DELETE(hh_sock, db.contexts_by_sock, mosq_found);
+			}
+#endif
+			rc = COMPAT_CLOSE(mosq->sock);
+			mosq->sock = INVALID_SOCKET;
+		}
+	}
+
+#ifdef WITH_BROKER
+	if(mosq->listener){
+		mosq->listener->client_count--;
+		mosq->listener = NULL;
+	}
+#endif
+
+	return rc;
+}
 
 static int net__try_connect_tcp(const char *host, uint16_t port, mosq_sock_t *sock, const char *bind_address, bool blocking)
 {
@@ -485,7 +509,6 @@ static int net__try_connect_tcp(const char *host, uint16_t port, mosq_sock_t *so
 	return rc;
 }
 
-
 #ifdef WITH_UNIX_SOCKETS
 static int net__try_connect_unix(const char *host, mosq_sock_t *sock)
 {
@@ -519,7 +542,6 @@ static int net__try_connect_unix(const char *host, mosq_sock_t *sock)
 	return 0;
 }
 #endif
-
 
 int net__try_connect(const char *host, uint16_t port, mosq_sock_t *sock, const char *bind_address, bool blocking)
 {
@@ -908,6 +930,7 @@ int net__socket_connect_step3(struct mosquitto *mosq, const char *host)
 	return MOSQ_ERR_SUCCESS;
 }
 
+
 /* Create a socket and connect it to 'ip' on port 'port'.  */
 int net__socket_connect(struct mosquitto *mosq, const char *host, uint16_t port, const char *bind_address, bool blocking)
 {
@@ -935,7 +958,6 @@ int net__socket_connect(struct mosquitto *mosq, const char *host, uint16_t port,
 
 	return rc;
 }
-
 
 #ifdef WITH_TLS
 static int net__handle_ssl(struct mosquitto* mosq, int ret)
@@ -969,65 +991,7 @@ static int net__handle_ssl(struct mosquitto* mosq, int ret)
 }
 #endif
 
-ssize_t net__read(struct mosquitto *mosq, void *buf, size_t count)
-{
-#ifdef WITH_TLS
-	int ret;
 #endif
-	assert(mosq);
-	errno = 0;
-#ifdef WITH_TLS
-	if(mosq->ssl){
-		ERR_clear_error();
-		ret = SSL_read(mosq->ssl, buf, (int)count);
-		if(ret <= 0){
-			ret = net__handle_ssl(mosq, ret);
-		}
-		return (ssize_t )ret;
-	}else{
-		/* Call normal read/recv */
-
-#endif
-
-#ifndef WIN32
-	return read(mosq->sock, buf, count);
-#else
-	return recv(mosq->sock, buf, count, 0);
-#endif
-
-#ifdef WITH_TLS
-	}
-#endif
-}
-
-ssize_t net__write(struct mosquitto *mosq, const void *buf, size_t count)
-{
-#ifdef WITH_TLS
-	int ret;
-#endif
-	assert(mosq);
-
-	errno = 0;
-#ifdef WITH_TLS
-	if(mosq->ssl){
-		ERR_clear_error();
-		mosq->want_write = false;
-		ret = SSL_write(mosq->ssl, buf, (int)count);
-		if(ret < 0){
-			ret = net__handle_ssl(mosq, ret);
-		}
-		return (ssize_t )ret;
-	}else{
-		/* Call normal write/send */
-#endif
-
-	return send(mosq->sock, buf, count, MSG_NOSIGNAL);
-
-#ifdef WITH_TLS
-	}
-#endif
-}
-
 
 int net__socket_nonblock(mosq_sock_t *sock)
 {
@@ -1057,6 +1021,173 @@ int net__socket_nonblock(mosq_sock_t *sock)
 	return MOSQ_ERR_SUCCESS;
 }
 
+#ifdef WITH_QUIC
+int net__quic_close(struct mosquitto *mosq)
+{
+    assert(mosq);
+    if (mosq->quic_session != NULL) {
+        MsQuic->ConnectionShutdown(mosq->quic_session->connection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
+        mosq->quic_session->connection = NULL;
+		mosq->quic_session->stream = NULL;
+		mosquitto__free(mosq->quic_session);
+		mosq->quic_session = NULL;
+    }
+    return 0;
+}
+
+int net__quic_connect(struct mosquitto *mosq, const char *host, uint16_t port, const char *bind_address)
+{
+	if (!mosq || !host) {
+		return MOSQ_ERR_INVAL;
+	}
+
+	mosq->quic_session = mosquitto__malloc(sizeof(struct mosq_quic_session_t));
+	if (!mosq->quic_session) {
+		return MOSQ_ERR_NOMEM;
+	}
+	mosq->quic_session->connection = NULL;
+	mosq->quic_session->stream = NULL;
+	
+	QUIC_STATUS quic_status = QUIC_STATUS_SUCCESS;
+
+	if (QUIC_FAILED(quic_status = MsQuic->ConnectionOpen(mosq->quic_registration, QuicClientConnectionCallback, NULL, &(mosq->quic_session->connection)))) {
+        log__printf(mosq, MOSQ_LOG_ERR, "ConnectionOpen failed, 0x%x!", quic_status);
+		return MOSQ_ERR_QUIC;
+    }
+	if (bind_address) {
+		if (QUIC_FAILED(quic_status = MsQuic->SetParam(mosq->quic_session->connection, QUIC_PARAM_CONN_LOCAL_ADDRESS, sizeof(bind_address), bind_address))) {
+			log__printf(mosq, MOSQ_LOG_ERR, "SetParam(QUIC_PARAM_CONN_LOCAL_ADDRESS) failed, 0x%x!", quic_status);
+			return MOSQ_ERR_QUIC;
+		}
+	}
+	if (QUIC_FAILED(quic_status = MsQuic->ConnectionStart(mosq->quic_session->connection, mosq->quic_configuration, QUIC_ADDRESS_FAMILY_UNSPEC, host, port))) {
+        log__printf(mosq, MOSQ_LOG_ERR, "ConnectionStart failed, 0x%x!", quic_status);
+		return MOSQ_ERR_QUIC;
+    }
+	if (QUIC_FAILED(quic_status = MsQuic->StreamOpen(mosq->quic_session->connection, QUIC_STREAM_OPEN_FLAG_NONE, QuicClientStreamCallback, NULL, &(mosq->quic_session->stream)))) {
+        log__printf(mosq, MOSQ_LOG_ERR, "StreamOpen failed, 0x%x!", quic_status);
+        return MOSQ_ERR_QUIC;
+    }
+	if (QUIC_FAILED(quic_status = MsQuic->StreamStart(mosq->quic_session->stream, QUIC_STREAM_START_FLAG_NONE))) {
+        log__printf(mosq, MOSQ_LOG_ERR, "StreamStart failed, 0x%x!", quic_status);
+        return MOSQ_ERR_QUIC;
+    }
+	return MOSQ_ERR_SUCCESS;
+}
+#endif
+
+ssize_t net__read(
+#ifdef WITH_TCP
+	struct mosquitto *mosq,
+#endif
+#ifdef WITH_QUIC
+	const QUIC_STREAM_EVENT* Event,
+#endif
+	void *buf, 
+	size_t count)
+{
+#ifdef TCP
+#ifdef WITH_TLS
+	int ret;
+#endif
+	assert(mosq);
+	errno = 0;
+#ifdef WITH_TLS
+	if(mosq->ssl){
+		ERR_clear_error();
+		ret = SSL_read(mosq->ssl, buf, (int)count);
+		if(ret <= 0){
+			ret = net__handle_ssl(mosq, ret);
+		}
+		return (ssize_t )ret;
+	}else{
+		/* Call normal read/recv */
+
+#endif
+
+#ifndef WIN32
+	return read(mosq->sock, buf, count);
+#else
+	return recv(mosq->sock, buf, count, 0);
+#endif
+
+#ifdef WITH_TLS
+	}
+#endif
+#endif /* TCP */
+
+#ifdef WITH_QUIC
+    if (Event->Type != QUIC_STREAM_EVENT_RECEIVE) {
+        return -1; // 如果不是接收事件，返回错误
+    }
+
+    const QUIC_BUFFER* ReceiveBuffer = Event->RECEIVE.Buffers;
+    size_t bytesCopied = 0;
+
+    for (size_t i = 0; i < Event->RECEIVE.BufferCount && bytesCopied < count; i++) {
+        size_t toCopy = (ReceiveBuffer[i].Length < (count - bytesCopied)) ? ReceiveBuffer[i].Length : (count - bytesCopied);
+        memcpy((uint8_t*)buf + bytesCopied, ReceiveBuffer[i].Buffer, toCopy);
+        bytesCopied += toCopy;
+    }
+
+    return (ssize_t)bytesCopied;
+#endif /* QUIC */
+}
+
+ssize_t net__write(struct mosquitto *mosq, const void *buf, size_t count)
+{
+assert(mosq);
+
+#ifdef TCP
+#ifdef WITH_TLS
+	int ret;
+#endif
+	errno = 0;
+#ifdef WITH_TLS
+	if(mosq->ssl){
+		ERR_clear_error();
+		mosq->want_write = false;
+		ret = SSL_write(mosq->ssl, buf, (int)count);
+		if(ret < 0){
+			ret = net__handle_ssl(mosq, ret);
+		}
+		return (ssize_t )ret;
+	}else{
+		/* Call normal write/send */
+#endif
+
+	return send(mosq->sock, buf, count, MSG_NOSIGNAL);
+
+#ifdef WITH_TLS
+	}
+#endif
+#endif /* TCP */
+
+#ifdef WITH_QUIC
+	uint8_t* SendBufferRaw;
+    QUIC_BUFFER* SendBuffer;
+
+    SendBufferRaw = (uint8_t*)malloc(sizeof(QUIC_BUFFER) + count);
+    if (SendBufferRaw == NULL) {
+        return -1;
+    }
+    SendBuffer = (QUIC_BUFFER*)SendBufferRaw;
+    SendBuffer->Buffer = SendBufferRaw + sizeof(QUIC_BUFFER);
+    SendBuffer->Length = count;
+    memcpy(SendBuffer->Buffer, buf, count);
+
+    QUIC_STATUS Status;
+    if (QUIC_FAILED(Status = MsQuic->StreamSend(mosq->quic_session->stream, SendBuffer, 1, QUIC_SEND_FLAG_NONE, SendBuffer))) {
+        printf("StreamSend failed, 0x%x!\n", Status);
+        free(SendBufferRaw);
+        return -1;
+    }
+
+    ssize_t bytesSent = (ssize_t)count;
+
+    return bytesSent;
+#endif /* QUIC */
+}
 
 #ifndef WITH_BROKER
 int net__socketpair(mosq_sock_t *pairR, mosq_sock_t *pairW)
