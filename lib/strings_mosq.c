@@ -89,6 +89,10 @@ const char *mosquitto_strerror(int mosq_errno)
 			return "Packet larger than supported by the server.";
 		case MOSQ_ERR_OCSP:
 			return "OCSP error.";
+		case MOSQ_ERR_QUIC:
+			return "A QUIC error occurred.";
+		case MOSQ_ERR_QUIC_HANDSHAKE:
+			return "QUIC handshake failed.";
 		default:
 			if(mosq_errno >= 128) {
 				// If mosq_errno is greater than 127,

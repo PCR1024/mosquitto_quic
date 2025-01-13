@@ -517,7 +517,9 @@ int main(int argc, char *argv[])
 	struct mosquitto *mosq = NULL;
 	int rc;
 
-	mosquitto_lib_init();
+	if(mosquitto_lib_init()){
+		goto cleanup;
+	}
 
 	if(pub_shared_init()) return 1;
 

@@ -211,10 +211,21 @@ struct mosquitto_msg_data{
 	uint16_t inflight_maximum;
 };
 
+enum mosquitto_quic_state {
+    mosq_qs_new = 0,              
+    mosq_qs_connecting = 1,   // 连接中
+    mosq_qs_connected = 2,    // 连接成功
+    mosq_qs_failed = 3,       // 连接失败
+    mosq_qs_closed = 4        // 正常关闭
+};               
+
 #ifdef WITH_QUIC
 struct mosq_quic_session_t {
 	HQUIC connection;
     HQUIC stream;
+	enum mosquitto_quic_state state;
+	pthread_mutex_t state_mutex;
+    pthread_cond_t state_cond;
 };
 #endif
 
@@ -225,9 +236,8 @@ struct mosquitto {
 #endif
 
 #ifdef WITH_QUIC
-    HQUIC quic_registration;
-	HQUIC quic_configuration;
-	struct mosq_quic_session_t *quic_session;	
+	QUIC_EXECUTION_PROFILE quic_execution_profile;
+	struct mosq_quic_session_t *quic_session;
 #endif
 #ifdef WITH_TCP
 	mosq_sock_t sock;

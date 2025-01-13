@@ -3,29 +3,19 @@
 
 #ifdef WITH_QUIC
 #include "msquic.h"
+#include "mosquitto.h"
+#include "mosquitto_internal.h"
 
 
-extern const QUIC_API_TABLE* MsQuic;
+int msquic_init(void);
+void msquic_cleanup(void);
 
-_IRQL_requires_max_(DISPATCH_LEVEL)
-_Function_class_(QUIC_STREAM_CALLBACK)
-QUIC_STATUS
-QUIC_API
-QuicClientStreamCallback(
-    _In_ HQUIC Stream,
-    _In_opt_ void* Context,
-    _Inout_ QUIC_STREAM_EVENT* Event
-);
+int msquic_config(struct mosquitto *mosq);
 
-_IRQL_requires_max_(DISPATCH_LEVEL)
-_Function_class_(QUIC_CONNECTION_CALLBACK)
-QUIC_STATUS
-QUIC_API
-QuicClientConnectionCallback(
-    _In_ HQUIC Connection,
-    _In_opt_ void* Context,
-    _Inout_ QUIC_CONNECTION_EVENT* Event
-);
+int msquic_try_connect(struct mosquitto *mosq, const char *host, uint16_t port, const char *bind_address);
+int msquic_try_close(struct mosquitto *mosq);
+
+ssize_t msquic_send(struct mosquitto *mosq, const void *buf, size_t count);
 
 #endif
 

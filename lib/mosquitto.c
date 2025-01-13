@@ -163,8 +163,7 @@ int mosquitto_reinitialise(struct mosquitto *mosq, const char *id, bool clean_st
 	}
 	mosq->protocol = mosq_p_mqtt311;
 #ifdef WITH_QUIC
-	mosq->quic_registration = NULL;
-	mosq->quic_configuration = NULL;
+	mosq->quic_execution_profile = QUIC_EXECUTION_PROFILE_LOW_LATENCY;
 	mosq->quic_session = NULL;
 #endif
 #ifdef WITH_TCP
@@ -275,18 +274,8 @@ void mosquitto__destroy(struct mosquitto *mosq)
 	}
 #endif
 #ifdef WITH_QUIC
-	if(MsQuic != NULL){
-		if (mosq->quic_session != NULL) {
-			net__quic_close(mosq);
-		}
-		if(mosq->quic_configuration !=NULL){
-			MsQuic->ConfigurationClose(mosq->quic_configuration);
-			mosq->quic_configuration = NULL;
-		}
-		if (mosq->quic_registration != NULL) {
-			MsQuic->RegistrationClose(mosq->quic_registration);
-			mosq->quic_registration = NULL;
-		}
+	if (mosq->quic_session != NULL) {
+		net__quic_close(mosq);
 	}
 #endif
 #ifdef WITH_TCP

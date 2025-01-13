@@ -129,30 +129,9 @@ int mosquitto_reconnect_delay_set(struct mosquitto *mosq, unsigned int reconnect
 int mosquitto_quic_set(struct mosquitto *mosq)
 {
 #ifdef WITH_QUIC
-	QUIC_STATUS quic_status = QUIC_STATUS_SUCCESS;
-	
-	const QUIC_REGISTRATION_CONFIG quic_regconfig = {"mosquitto", QUIC_EXECUTION_PROFILE_LOW_LATENCY};
-	if (QUIC_FAILED(quic_status = MsQuic->RegistrationOpen(&quic_regconfig, &mosq->quic_registration))) {
-		return MOSQ_ERR_QUIC_REGISTRATION_OPEN;
-    }
-	
-	const QUIC_BUFFER quic_alpn = { sizeof("mqtt") - 1, (uint8_t*)"mqtt" };
-	QUIC_SETTINGS quic_settings = {0};
-	quic_settings.IdleTimeoutMs = 0;
-    quic_settings.IsSet.IdleTimeoutMs = 1;
+	if(!mosq) return MOSQ_ERR_INVAL;
 
-    if (QUIC_FAILED(quic_status = MsQuic->ConfigurationOpen(mosq->quic_registration, &quic_alpn, 1, &quic_settings, sizeof(quic_settings), NULL, &mosq->quic_configuration))) {
-		return MOSQ_ERR_QUIC_CONFIGURATION_OPEN;
-    }
-
-	QUIC_CREDENTIAL_CONFIG quic_credconfig;
-    memset(&quic_credconfig, 0, sizeof(quic_credconfig));
-    quic_credconfig.Type = QUIC_CREDENTIAL_TYPE_NONE;
-    quic_credconfig.Flags = QUIC_CREDENTIAL_FLAG_CLIENT | QUIC_CREDENTIAL_FLAG_NO_CERTIFICATE_VALIDATION;
-	if (QUIC_FAILED(quic_status = MsQuic->ConfigurationLoadCredential(mosq->quic_configuration, &quic_credconfig))) {
-        return MOSQ_ERR_QUIC_CONFIGURATION_LOAD_CRED;
-    }
-	return MOSQ_ERR_SUCCESS;
+	return msquic_config(mosq);
 #else
 	UNUSED(mosq);
 	return MOSQ_ERR_NOT_SUPPORTED;

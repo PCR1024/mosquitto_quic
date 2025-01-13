@@ -147,12 +147,8 @@ int net__init(void)
 #endif
 
 #ifdef WITH_QUIC
-	if(MsQuic == NULL){
-		QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
-    	if (QUIC_FAILED(Status = MsQuicOpen2(&MsQuic))) {
-			return MOSQ_ERR_UNKNOWN;
-    	}
-	}
+	int rc = msquic_init();
+	if(rc) return rc;
 #endif
 
 #ifdef WITH_SRV
@@ -185,15 +181,14 @@ void net__cleanup(void)
 	ares_library_cleanup();
 #endif
 
+#ifdef WITH_QUIC
+	msquic_cleanup();
+#endif
+
 #if defined(WITH_TCP) && defined(WIN32)
 	WSACleanup();
 #endif
 
-#ifdef WITH_QUIC
-	if(MsQuic != NULL){
-		MsQuicClose(MsQuic);
-	}
-#endif
 
 }
 
@@ -1024,55 +1019,63 @@ int net__socket_nonblock(mosq_sock_t *sock)
 #ifdef WITH_QUIC
 int net__quic_close(struct mosquitto *mosq)
 {
-    assert(mosq);
-    if (mosq->quic_session != NULL) {
-        MsQuic->ConnectionShutdown(mosq->quic_session->connection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
-        mosq->quic_session->connection = NULL;
-		mosq->quic_session->stream = NULL;
+	int rc;
+    if (!mosq && !mosq->quic_session) {
+        return MOSQ_ERR_INVAL;
+    }
+    
+	rc = msquic_try_close(mosq);
+
+	if(mosq->quic_session)
+	{
+		pthread_mutex_destroy(&mosq->quic_session->state_mutex);
+		pthread_cond_destroy(&mosq->quic_session->state_cond);
 		mosquitto__free(mosq->quic_session);
 		mosq->quic_session = NULL;
-    }
-    return 0;
+	}
+	return rc;
 }
 
 int net__quic_connect(struct mosquitto *mosq, const char *host, uint16_t port, const char *bind_address)
 {
-	if (!mosq || !host) {
-		return MOSQ_ERR_INVAL;
-	}
+	int rc;
+
+    if (!mosq || !host) {
+        return MOSQ_ERR_INVAL;
+    }
+
+	mosq->quic_session = NULL;
 
 	mosq->quic_session = mosquitto__malloc(sizeof(struct mosq_quic_session_t));
-	if (!mosq->quic_session) {
-		return MOSQ_ERR_NOMEM;
-	}
-	mosq->quic_session->connection = NULL;
-	mosq->quic_session->stream = NULL;
-	
-	QUIC_STATUS quic_status = QUIC_STATUS_SUCCESS;
+    if (!mosq->quic_session) {
+        return MOSQ_ERR_NOMEM;
+    }
 
-	if (QUIC_FAILED(quic_status = MsQuic->ConnectionOpen(mosq->quic_registration, QuicClientConnectionCallback, NULL, &(mosq->quic_session->connection)))) {
-        log__printf(mosq, MOSQ_LOG_ERR, "ConnectionOpen failed, 0x%x!", quic_status);
-		return MOSQ_ERR_QUIC;
+    mosq->quic_session->connection = NULL;
+    mosq->quic_session->stream = NULL;
+    mosq->quic_session->state = mosq_qs_new;
+
+    rc = pthread_mutex_init(&mosq->quic_session->state_mutex, NULL);
+    if (rc) {
+        mosquitto__free(mosq->quic_session);
+        return MOSQ_ERR_UNKNOWN;
     }
-	if (bind_address) {
-		if (QUIC_FAILED(quic_status = MsQuic->SetParam(mosq->quic_session->connection, QUIC_PARAM_CONN_LOCAL_ADDRESS, sizeof(bind_address), bind_address))) {
-			log__printf(mosq, MOSQ_LOG_ERR, "SetParam(QUIC_PARAM_CONN_LOCAL_ADDRESS) failed, 0x%x!", quic_status);
-			return MOSQ_ERR_QUIC;
-		}
+
+    rc = pthread_cond_init(&mosq->quic_session->state_cond, NULL);
+    if (rc) {
+        pthread_mutex_destroy(&mosq->quic_session->state_mutex);
+        mosquitto__free(mosq->quic_session);
+        return MOSQ_ERR_UNKNOWN;
+    }
+
+   	rc = msquic_try_connect(mosq, host, port, bind_address);
+	if (rc && mosq->quic_session) {
+		pthread_mutex_destroy(&mosq->quic_session->state_mutex);
+		pthread_cond_destroy(&mosq->quic_session->state_cond);
+		mosquitto__free(mosq->quic_session);
+		mosq->quic_session = NULL;
 	}
-	if (QUIC_FAILED(quic_status = MsQuic->ConnectionStart(mosq->quic_session->connection, mosq->quic_configuration, QUIC_ADDRESS_FAMILY_UNSPEC, host, port))) {
-        log__printf(mosq, MOSQ_LOG_ERR, "ConnectionStart failed, 0x%x!", quic_status);
-		return MOSQ_ERR_QUIC;
-    }
-	if (QUIC_FAILED(quic_status = MsQuic->StreamOpen(mosq->quic_session->connection, QUIC_STREAM_OPEN_FLAG_NONE, QuicClientStreamCallback, NULL, &(mosq->quic_session->stream)))) {
-        log__printf(mosq, MOSQ_LOG_ERR, "StreamOpen failed, 0x%x!", quic_status);
-        return MOSQ_ERR_QUIC;
-    }
-	if (QUIC_FAILED(quic_status = MsQuic->StreamStart(mosq->quic_session->stream, QUIC_STREAM_START_FLAG_NONE))) {
-        log__printf(mosq, MOSQ_LOG_ERR, "StreamStart failed, 0x%x!", quic_status);
-        return MOSQ_ERR_QUIC;
-    }
-	return MOSQ_ERR_SUCCESS;
+	return rc;
 }
 #endif
 
@@ -1164,28 +1167,7 @@ assert(mosq);
 #endif /* TCP */
 
 #ifdef WITH_QUIC
-	uint8_t* SendBufferRaw;
-    QUIC_BUFFER* SendBuffer;
-
-    SendBufferRaw = (uint8_t*)malloc(sizeof(QUIC_BUFFER) + count);
-    if (SendBufferRaw == NULL) {
-        return -1;
-    }
-    SendBuffer = (QUIC_BUFFER*)SendBufferRaw;
-    SendBuffer->Buffer = SendBufferRaw + sizeof(QUIC_BUFFER);
-    SendBuffer->Length = count;
-    memcpy(SendBuffer->Buffer, buf, count);
-
-    QUIC_STATUS Status;
-    if (QUIC_FAILED(Status = MsQuic->StreamSend(mosq->quic_session->stream, SendBuffer, 1, QUIC_SEND_FLAG_NONE, SendBuffer))) {
-        printf("StreamSend failed, 0x%x!\n", Status);
-        free(SendBufferRaw);
-        return -1;
-    }
-
-    ssize_t bytesSent = (ssize_t)count;
-
-    return bytesSent;
+	return msquic_send(mosq, buf, count);
 #endif /* QUIC */
 }
 
