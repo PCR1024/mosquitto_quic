@@ -10,6 +10,11 @@ cmake_policy(SET CMP0042 NEW)
 project(mosquitto)
 set (VERSION 2.0.20)
 
+# 禁用 -Werror=undef
+if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-Wno-undef -Wno-unused-function)
+endif()
+
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/")
 
 add_definitions (-DCMAKE -DVERSION=\"${VERSION}\")
@@ -136,6 +141,13 @@ endif (WITH_DLT)
 
 option(WITH_CJSON "Build with cJSON support (required for dynamic security plugin and useful for mosquitto_sub)?" ON)
 if (WITH_CJSON)
+	if(CMAKE_SYSTEM_PROCESSOR STREQUAL "arm")
+		add_subdirectory(third_party/cJSON)
+		set(CJSON_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/third_party/cJSON)
+		set(CJSON_LIBRARY cjson)
+		include_directories(${CJSON_INCLUDE_DIR})
+	endif()
+
     FIND_PACKAGE(cJSON)
     if (CJSON_FOUND)
 	    message(STATUS ${CJSON_FOUND})
