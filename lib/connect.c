@@ -193,7 +193,7 @@ static int mosquitto__reconnect(struct mosquitto *mosq, bool blocking)
 	message__reconnect_reset(mosq, false);
 
 #ifdef WITH_QUIC
-	if (mosq->quic_session != NULL)
+	if (mosq->connection.handle != NULL)
 	{
 		net__quic_close(mosq);
 	}
@@ -274,7 +274,7 @@ int mosquitto_disconnect_v5(struct mosquitto *mosq, int reason_code, const mosqu
 	mosquitto__set_state(mosq, mosq_cs_disconnected);
 	mosquitto__set_request_disconnect(mosq, true);
 #ifdef WITH_QUIC
-	if(mosq->quic_session == NULL){
+	if(mosq->connection.handle == NULL){
 #endif
 #ifdef WITH_TCP
 	if(mosq->sock == INVALID_SOCKET){

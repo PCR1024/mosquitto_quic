@@ -1019,63 +1019,22 @@ int net__socket_nonblock(mosq_sock_t *sock)
 #ifdef WITH_QUIC
 int net__quic_close(struct mosquitto *mosq)
 {
-	int rc;
-    if (!mosq && !mosq->quic_session) {
-        return MOSQ_ERR_INVAL;
-    }
-    
-	rc = msquic_try_close(mosq);
-
-	if(mosq->quic_session)
+	int rc = 0;
+    assert(mosq);
+	struct mosq_quic_connection* connection = &mosq->connection;
+	if(connection->handle)
 	{
-		pthread_mutex_destroy(&mosq->quic_session->state_mutex);
-		pthread_cond_destroy(&mosq->quic_session->state_cond);
-		mosquitto__free(mosq->quic_session);
-		mosq->quic_session = NULL;
+		rc = msquic_try_close(connection);
+		connection->handle = NULL;
 	}
 	return rc;
 }
 
 int net__quic_connect(struct mosquitto *mosq, const char *host, uint16_t port, const char *bind_address)
 {
-	int rc;
+	if(!mosq || !host || !port) return MOSQ_ERR_INVAL;
 
-    if (!mosq || !host) {
-        return MOSQ_ERR_INVAL;
-    }
-
-	mosq->quic_session = NULL;
-
-	mosq->quic_session = mosquitto__malloc(sizeof(struct mosq_quic_session_t));
-    if (!mosq->quic_session) {
-        return MOSQ_ERR_NOMEM;
-    }
-
-    mosq->quic_session->connection = NULL;
-    mosq->quic_session->stream = NULL;
-    mosq->quic_session->state = mosq_qs_new;
-
-    rc = pthread_mutex_init(&mosq->quic_session->state_mutex, NULL);
-    if (rc) {
-        mosquitto__free(mosq->quic_session);
-        return MOSQ_ERR_UNKNOWN;
-    }
-
-    rc = pthread_cond_init(&mosq->quic_session->state_cond, NULL);
-    if (rc) {
-        pthread_mutex_destroy(&mosq->quic_session->state_mutex);
-        mosquitto__free(mosq->quic_session);
-        return MOSQ_ERR_UNKNOWN;
-    }
-
-   	rc = msquic_try_connect(mosq, host, port, bind_address);
-	if (rc && mosq->quic_session) {
-		pthread_mutex_destroy(&mosq->quic_session->state_mutex);
-		pthread_cond_destroy(&mosq->quic_session->state_cond);
-		mosquitto__free(mosq->quic_session);
-		mosq->quic_session = NULL;
-	}
-	return rc;
+	return msquic_try_connect(mosq, host, port, bind_address);
 }
 #endif
 

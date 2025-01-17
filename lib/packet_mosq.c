@@ -231,7 +231,7 @@ int packet__write(struct mosquitto *mosq)
 
 	if(!mosq) return MOSQ_ERR_INVAL;
 #ifdef WITH_QUIC
-	if(mosq->quic_session == NULL) return MOSQ_ERR_NO_CONN;
+	if(mosq->connection.handle == NULL) return MOSQ_ERR_NO_CONN;
 #endif
 #ifdef WITH_BROKER
 	if(mosq->sock == INVALID_SOCKET) return MOSQ_ERR_NO_CONN;

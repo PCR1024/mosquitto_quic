@@ -92,7 +92,7 @@ int mosquitto__check_keepalive(struct mosquitto *mosq)
 	last_msg_in = mosq->last_msg_in;
 	COMPAT_pthread_mutex_unlock(&mosq->msgtime_mutex);
 #ifdef WITH_QUIC
-	if(mosq->keepalive && mosq->quic_session != NULL &&
+	if(mosq->keepalive && mosq->connection.handle != NULL &&
 			(now >= next_msg_out || now - last_msg_in >= mosq->keepalive)){
 #endif
 #ifdef WITH_TCP

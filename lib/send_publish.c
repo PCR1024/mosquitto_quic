@@ -58,7 +58,7 @@ int send__publish(struct mosquitto *mosq, uint16_t mid, const char *topic, uint3
 	if(mosq->sock == INVALID_SOCKET && !mosq->wsi) return MOSQ_ERR_NO_CONN;
 #else
 #ifdef WITH_QUIC
-	if(mosq->quic_session == NULL) return MOSQ_ERR_NO_CONN;
+	if(mosq->connection.handle == NULL) return MOSQ_ERR_NO_CONN;
 #endif
 #ifdef WITH_TCP
 	if(mosq->sock == INVALID_SOCKET) return MOSQ_ERR_NO_CONN;

@@ -210,20 +210,32 @@ struct mosquitto_msg_data{
 	int inflight_quota;
 	uint16_t inflight_maximum;
 };
+#ifdef WITH_QUIC
+struct mosq_quic_packet_reader {
+    const QUIC_BUFFER *buffers;     // QUIC缓冲区数组
+    uint32_t buffer_count;          // 总缓冲区数量
+    uint32_t current_buffer;        // 当前处理的缓冲区索引
+    uint32_t buffer_pos;            // 当前缓冲区读取位置
+    uint64_t total_length;          // 总数据长度
+    uint64_t consumed_length;       // 已处理的数据长度
+};
 
-enum mosquitto_quic_state {
+struct mosq_quic_stream {
+    HQUIC handle;
+    struct mosq_quic_packet_reader packet_reader;
+};
+
+enum mosquitto_quic_connection_state {
     mosq_qs_new = 0,              
     mosq_qs_connecting = 1,   // 连接中
     mosq_qs_connected = 2,    // 连接成功
     mosq_qs_failed = 3,       // 连接失败
     mosq_qs_closed = 4        // 正常关闭
-};               
+};
 
-#ifdef WITH_QUIC
-struct mosq_quic_session_t {
-	HQUIC connection;
-    HQUIC stream;
-	enum mosquitto_quic_state state;
+struct mosq_quic_connection {
+	HQUIC handle;
+	enum mosquitto_quic_connection_state state;
 	pthread_mutex_t state_mutex;
     pthread_cond_t state_cond;
 };
@@ -237,7 +249,8 @@ struct mosquitto {
 
 #ifdef WITH_QUIC
 	QUIC_EXECUTION_PROFILE quic_execution_profile;
-	struct mosq_quic_session_t *quic_session;
+	struct mosq_quic_connection connection;
+	struct mosq_quic_stream stream;
 #endif
 #ifdef WITH_TCP
 	mosq_sock_t sock;

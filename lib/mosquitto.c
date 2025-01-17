@@ -119,7 +119,8 @@ struct mosquitto *mosquitto_new(const char *id, bool clean_start, void *userdata
 	mosq = (struct mosquitto *)mosquitto__calloc(1, sizeof(struct mosquitto));
 	if(mosq){
 #ifdef WITH_QUIC
-		mosq->quic_session = NULL;
+		mosq->connection.handle = NULL;
+		mosq->stream.handle = NULL;
 #endif
 #ifdef WITH_TCP
 		mosq->sock = INVALID_SOCKET;
@@ -164,7 +165,15 @@ int mosquitto_reinitialise(struct mosquitto *mosq, const char *id, bool clean_st
 	mosq->protocol = mosq_p_mqtt311;
 #ifdef WITH_QUIC
 	mosq->quic_execution_profile = QUIC_EXECUTION_PROFILE_LOW_LATENCY;
-	mosq->quic_session = NULL;
+	mosq->connection.handle = NULL;
+	mosq->connection.state = mosq_qs_new;
+	mosq->stream.handle = NULL;
+	mosq->stream.packet_reader.buffers = NULL;
+    mosq->stream.packet_reader.buffer_count = 0;
+    mosq->stream.packet_reader.current_buffer = 0;
+    mosq->stream.packet_reader.buffer_pos = 0;
+    mosq->stream.packet_reader.buffer_count = 0;
+    mosq->stream.packet_reader.consumed_length = 0;
 #endif
 #ifdef WITH_TCP
 	mosq->sock = INVALID_SOCKET;
@@ -223,6 +232,10 @@ int mosquitto_reinitialise(struct mosquitto *mosq, const char *id, bool clean_st
 	mosq->tls_ocsp_required = false;
 #endif
 #ifdef WITH_THREADING
+#	ifdef WITH_QUIC
+	pthread_mutex_init(&mosq->connection.state_mutex, NULL);
+	pthread_cond_init(&mosq->connection.state_cond, NULL);
+#	endif
 	pthread_mutex_init(&mosq->callback_mutex, NULL);
 	pthread_mutex_init(&mosq->log_callback_mutex, NULL);
 	pthread_mutex_init(&mosq->state_mutex, NULL);
@@ -249,6 +262,12 @@ void mosquitto__destroy(struct mosquitto *mosq)
 {
 	if(!mosq) return;
 
+#ifdef WITH_QUIC
+	if (mosq->connection.handle != NULL) {
+		net__quic_close(mosq);
+	}
+#endif
+
 #ifdef WITH_THREADING
 #  ifdef HAVE_PTHREAD_CANCEL
 	if(mosq->threaded == mosq_ts_self && !pthread_equal(mosq->thread_id, pthread_self())){
@@ -262,6 +281,10 @@ void mosquitto__destroy(struct mosquitto *mosq)
 		/* If mosq->id is not NULL then the client has already been initialised
 		 * and so the mutexes need destroying. If mosq->id is NULL, the mutexes
 		 * haven't been initialised. */
+#	ifdef WITH_QUIC
+		pthread_cond_destroy(&mosq->connection.state_cond);
+    	pthread_mutex_destroy(&mosq->connection.state_mutex);
+#	endif
 		pthread_mutex_destroy(&mosq->callback_mutex);
 		pthread_mutex_destroy(&mosq->log_callback_mutex);
 		pthread_mutex_destroy(&mosq->state_mutex);
@@ -273,11 +296,7 @@ void mosquitto__destroy(struct mosquitto *mosq)
 		pthread_mutex_destroy(&mosq->mid_mutex);
 	}
 #endif
-#ifdef WITH_QUIC
-	if (mosq->quic_session != NULL) {
-		net__quic_close(mosq);
-	}
-#endif
+
 #ifdef WITH_TCP
 	if(mosq->sock != INVALID_SOCKET){
 		net__socket_close(mosq);
