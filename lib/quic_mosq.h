@@ -15,7 +15,8 @@ int msquic_config(struct mosquitto *mosq);
 int msquic_try_connect(struct mosquitto *mosq, const char *host, uint16_t port, const char *bind_address);
 int msquic_try_close(struct mosq_quic_connection *connection);
 
-ssize_t msquic_send(struct mosquitto *mosq, const void *buf, size_t count);
+ssize_t msquic_send(HQUIC stream, const void *buf, size_t count);
+ssize_t msquic_recv(struct mosq_quic_packet_reader* reader, void *buf, size_t count);
 
 #endif
 

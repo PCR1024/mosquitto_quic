@@ -356,7 +356,6 @@ int packet__write(struct mosquitto *mosq)
 	return MOSQ_ERR_SUCCESS;
 }
 
-#ifndef WITH_QUIC
 int packet__read(struct mosquitto *mosq)
 {
 	uint8_t byte;
@@ -367,10 +366,16 @@ int packet__read(struct mosquitto *mosq)
 	if(!mosq){
 		return MOSQ_ERR_INVAL;
 	}
+#ifdef WITH_QUIC
+	if(mosq->connection.handle == NULL){
+		return MOSQ_ERR_NO_CONN;
+	}
+#endif
+#ifdef WITH_TCP
 	if(mosq->sock == INVALID_SOCKET){
 		return MOSQ_ERR_NO_CONN;
 	}
-
+#endif
 	state = mosquitto__get_state(mosq);
 	if(state == mosq_cs_connect_pending){
 		return MOSQ_ERR_SUCCESS;
@@ -581,4 +586,3 @@ int packet__read(struct mosquitto *mosq)
 #endif
 	return rc;
 }
-#endif

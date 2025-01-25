@@ -1,8 +1,8 @@
 set(shared_src client_shared.c client_shared.h client_props.c)
 
-if (WITH_SRV)
+if (WITH_TCP AND WITH_SRV)
 	add_definitions("-DWITH_SRV")
-endif (WITH_SRV)
+endif ()
 
 set( CLIENT_INC ${mosquitto_SOURCE_DIR} ${mosquitto_SOURCE_DIR}/include
             ${STDBOOL_H_PATH} ${STDINT_H_PATH} ${PTHREAD_INCLUDE_DIR}

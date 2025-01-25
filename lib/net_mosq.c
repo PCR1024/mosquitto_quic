@@ -1039,12 +1039,7 @@ int net__quic_connect(struct mosquitto *mosq, const char *host, uint16_t port, c
 #endif
 
 ssize_t net__read(
-#ifdef WITH_TCP
 	struct mosquitto *mosq,
-#endif
-#ifdef WITH_QUIC
-	const QUIC_STREAM_EVENT* Event,
-#endif
 	void *buf, 
 	size_t count)
 {
@@ -1079,20 +1074,7 @@ ssize_t net__read(
 #endif /* TCP */
 
 #ifdef WITH_QUIC
-    if (Event->Type != QUIC_STREAM_EVENT_RECEIVE) {
-        return -1; // 如果不是接收事件，返回错误
-    }
-
-    const QUIC_BUFFER* ReceiveBuffer = Event->RECEIVE.Buffers;
-    size_t bytesCopied = 0;
-
-    for (size_t i = 0; i < Event->RECEIVE.BufferCount && bytesCopied < count; i++) {
-        size_t toCopy = (ReceiveBuffer[i].Length < (count - bytesCopied)) ? ReceiveBuffer[i].Length : (count - bytesCopied);
-        memcpy((uint8_t*)buf + bytesCopied, ReceiveBuffer[i].Buffer, toCopy);
-        bytesCopied += toCopy;
-    }
-
-    return (ssize_t)bytesCopied;
+	return msquic_recv(&mosq->stream.packet_reader, buf, count);
 #endif /* QUIC */
 }
 
@@ -1126,7 +1108,7 @@ assert(mosq);
 #endif /* TCP */
 
 #ifdef WITH_QUIC
-	return msquic_send(mosq, buf, count);
+	return msquic_send(mosq->stream.handle, buf, count);
 #endif /* QUIC */
 }
 

@@ -78,7 +78,7 @@ if (WITH_TRANSPORT STREQUAL "QUIC")
 	set (LIBRARIES ${LIBRARIES} inc warnings msquic)
 endif()
 
-if (WITH_SRV)
+if (WITH_TCP AND WITH_SRV)
 	# Simple detect c-ares
 	find_path(ARES_HEADER ares.h)
 	if (ARES_HEADER)
@@ -87,7 +87,7 @@ if (WITH_SRV)
 	else (ARES_HEADER)
 		message(WARNING "c-ares library not found.")
 	endif (ARES_HEADER)
-endif (WITH_SRV)
+endif ()
 
 add_library(libmosquitto SHARED ${C_SRC})
 set_target_properties(libmosquitto PROPERTIES

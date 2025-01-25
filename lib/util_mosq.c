@@ -114,7 +114,13 @@ int mosquitto__check_keepalive(struct mosquitto *mosq)
 				context__send_will(mosq);
 			}
 #  endif
+#	ifdef WITH_QUIC
+			net__quic_close(mosq);
+#	endif
+
+#	ifdef WITH_TCP
 			net__socket_close(mosq);
+#	endif
 #else
 
 #ifdef WITH_QUIC

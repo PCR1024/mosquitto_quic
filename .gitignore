@@ -104,3 +104,4 @@ obj-*/
 
 # Others
 tmp/
+.vscode/

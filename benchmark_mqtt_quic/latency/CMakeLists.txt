@@ -1,0 +1,2 @@
+add_mosquitto_client(mosquitto_pub_latency src/pub_latency.c)
+add_mosquitto_client(mosquitto_sub_latency src/sub_latency.c)
