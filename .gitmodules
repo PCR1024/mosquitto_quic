@@ -1,3 +1,6 @@
 [submodule "third_party/msquic"]
 	path = third_party/msquic
 	url = https://github.com/microsoft/msquic.git
+[submodule "third_party/cjson"]
+	path = third_party/cjson
+	url = https://github.com/DaveGamble/cJSON.git
