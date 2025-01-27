@@ -1,3 +1,11 @@
+local compile：
+
+    bash ./build.sh 
+
+cross compile：
+    
+    bash ./build.sh -c --ql-sdk-dir /path/to/ql-ol-extsdk-ag551qcnabr03a18m8g_ocpu
+
 Eclipse Mosquitto
 =================
 

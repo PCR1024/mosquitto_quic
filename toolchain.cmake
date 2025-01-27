@@ -9,11 +9,6 @@ set(FLOAT_ABI_SUFFIX eabi)
 set(CMAKE_C_COMPILER ${GNU_MACHINE}${FLOAT_ABI_SUFFIX}-gcc)
 set(CMAKE_CXX_COMPILER ${GNU_MACHINE}${FLOAT_ABI_SUFFIX}-g++)
 
-# 设置 sysroot
-set(QL_SDK_DIR /home/whiz/Projects/Shangyu/ql-ol-extsdk-ag551qcnabr03a18m8g_ocpu)  # 根据实际更改 
-set(CMAKE_FIND_ROOT_PATH ${QL_SDK_DIR}/ql-sysroots)
-set(CMAKE_SYSROOT ${QL_SDK_DIR}/ql-sysroots)
-
 # 设置 openssldir
 set(QL_OPENSSL_DIR /usr/lib/ssl)  # 根据实际更改 
 
